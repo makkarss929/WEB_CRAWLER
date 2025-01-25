@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Service
+  postgres:
+    image: postgres:13
+    container_name: postgres_db
+    env_file: .env  # Explicitly reference the .env file
+    environment:
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app_network
+
+  # Python App Service
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: python_app
+    depends_on:
+      - postgres
+    env_file: .env  # Explicitly reference the .env file
+    volumes:
+      - /tmp/playwright:/tmp
+    environment:
+      - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+      - DATABASE_HOST=${DATABASE_HOST}
+      - DATABASE_PORT=${DATABASE_PORT}
+      - DATABASE_USER=${DATABASE_USER}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD}
+      - DATABASE_NAME=${DATABASE_NAME}
+    ports:
+      - "5001:5001"
+    networks:
+      - app_network
+
+# Docker Networks
+networks:
+  app_network:
+    driver: bridge
+
+# Docker Volumes
+volumes:
+  postgres_data:

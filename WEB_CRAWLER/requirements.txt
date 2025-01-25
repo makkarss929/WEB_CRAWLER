@@ -1,0 +1,14 @@
+python-dotenv
+fastapi
+pydantic
+uvicorn[standard]
+beautifulsoup4
+requests
+requests-html
+lxml_html_clean
+ibis-framework
+pandas
+aiohttp
+asyncio
+playwright
+playwright-stealth
