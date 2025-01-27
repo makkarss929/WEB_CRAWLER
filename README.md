@@ -231,35 +231,27 @@ health = requests.get("http://localhost:5001/")
 
 - `POST /crawl` - Start crawling specified domains
   - Body: `{"domains": ["domain1.com", "domain2.com"]}`
-  - Returns: `{"product_urls": ["url1", "url2", ...]}`
+  - Returns: `{"metrics": {
+            'urls_crawled': 0,
+            'product_urls': 0,
+            'avg_response_time': 0,
+            'error_rate': 0
+        }`
 
-## 7. Database Schema
 
-```sql
-CREATE TABLE product_urls (
-    id SERIAL PRIMARY KEY,
-    url TEXT NOT NULL,
-    domain TEXT NOT NULL,
-    discovered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    status VARCHAR(50) DEFAULT 'pending',
-    metadata JSONB
-);
 
-CREATE INDEX idx_domain ON product_urls(domain);
-CREATE INDEX idx_status ON product_urls(status);
-```
+## 9. Future Steps
 
-## 8. Contributing
+### Planned Architecture Upgrades
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Write/update tests
-5. Submit a pull request
-
-For bug reports and feature requests, please open an issue.
-
----
+#### 1. RabbitMQ & Celery Integration
+- **Distributed Task Queue**: Use RabbitMQ for message brokering and Celery workers for parallel task processing.
+#### 2. Redis for Distributed State
+- **Bloom Filter Replacement**: Use RedisBloom for distributed URL tracking.
+#### 3. Monitoring & Metrics
+- **Flower Dashboard**: Real-time monitoring of Celery tasks.
+### 4. Horizontal Scaling
+- **Kubernetes Deployment**: Auto scaling
 
 ## License
 
