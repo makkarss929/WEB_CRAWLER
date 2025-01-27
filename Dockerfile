@@ -25,6 +25,6 @@ RUN playwright install chromium
 RUN playwright install-deps
 
 WORKDIR /app
-COPY . .
+COPY WEB_CRAWLER .
 
 CMD ["python", "app.py"]
