@@ -20,7 +20,7 @@ services:
   # Python App Service
   app:
     build:
-      context: WEB_CRAWLER
+      context: .
       dockerfile: Dockerfile
     container_name: python_app
     depends_on:
