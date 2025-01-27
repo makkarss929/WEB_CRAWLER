@@ -50,17 +50,23 @@ This crawler efficiently scrapes product URLs from websites using:
 
 ```mermaid
 graph TD
-    A[User Input] --> B((PriorityFrontier))
-    B --> C[WebScraper]
-    C --> D{Static Page?}
-    D -->|Yes| E[aioHTTP]
-    D -->|No| F[Playwright]
-    E & F --> G[Content Analysis]
-    G --> H[Product URL?]
-    H -->|Yes| I[PostgreSQL]
-    H -->|No| J[Link Extraction]
-    J --> B
-    I --> K[Metrics Dashboard]
+    A[User Request] --> B[FastAPI]
+    B --> C{New Crawl?}
+    C -->|Yes| D[WebScraper]
+    D --> E[PriorityFrontier]
+    E --> F[DomainRateLimiter]
+    F --> G{Browser Required?}
+    G -->|Yes| H[BrowserPool]
+    G -->|No| I[aioHTTP]
+    H --> J[Playwright]
+    I & J --> K[Content Parser]
+    K --> L[VisitedURLTracker]
+    L --> M[Product Detection]
+    M -->|Yes| N[AsyncPostgres]
+    M -->|No| O[Link Extractor]
+    O --> E
+    N --> P[(PostgreSQL)]
+    P --> Q[Metrics]
 ```
 
 ### Coding Architecture (LLD)
@@ -74,83 +80,96 @@ graph TD
 | `DomainRateLimiter` | Enforces per-domain crawl delays to avoid IP bans.                    |
 | `AsyncPostgres`     | Async PostgreSQL client for bulk inserts and connection pooling.      |
 | `ETL`               | Initializes database tables and manages schema migrations.            |
+| `HybridFetcher`     | Decides between static (aioHTTP) and dynamic (Playwright) <br/>fetching strategies.|
+| `CrawlerMetrics`    | Tracks and reports key performance indicators (URLs crawled, <br/>errors, product URLs detected).|
+| `ProductURLsManagement`    | Manages PostgreSQL table operations for storing product URLs and domain metadata.|
 
 ### Detailed System Architecture
 ```mermaid
-
-
 graph TD
     subgraph User["User Interface"]
         API[FastAPI Endpoints]
         Health[Health Check]
+        MetricsAPI[Metrics Dashboard]
     end
 
     subgraph Core["Core Components"]
         WS[WebScraper]
-        PQ[Priority Queue]
-        BF[Bloom Filter]
-        RL[Rate Limiter]
+        PQ[PriorityFrontier]
+        BF[VisitedURLTracker]
+        RL[DomainRateLimiter]
+        HM[HybridFetcher]
+        MET[CrawlerMetrics]
     end
 
     subgraph Browsers["Browser Management"]
-        BP[Browser Pool]
+        BP[BrowserPool]
         PW[Playwright]
         subgraph Fetch["Fetch Strategies"]
-            Static[Static HTTP/HTTPS]
-            Dynamic[Dynamic JS Rendering]
+            Static[Static HTTP]
+            Dynamic[Dynamic JS]
         end
     end
 
     subgraph Storage["Data Storage"]
         PG[(PostgreSQL)]
         subgraph Tables
-            URLs[Product URLs]
-            Meta[Domain Metadata]
+            URLs[product_urls]
+            Domains[domain_metadata]
         end
     end
 
-    subgraph Workers["Worker Components"]
+    subgraph Processing["Data Processing"]
         Parser[HTML Parser]
-        Extractor[URL Extractor]
+        Extractor[Link Extractor]
         Validator[URL Validator]
+        ProdDetect[Product Detector]
     end
 
-    %% Connections
-    API --> WS
-    Health --> WS
+    %% Data Flow
+    API -->|POST /crawl| WS
+    Health -->|GET /| WS
     
-    WS --> PQ
-    WS --> BF
-    WS --> RL
+    WS -->|URL management| PQ
+    WS -->|Rate limiting| RL
+    WS -->|Fetch strategy| HM
     
-    PQ --> BP
+    HM -->|Static| Static
+    HM -->|Dynamic| BP
     BP --> PW
-    PW --> Static
     PW --> Dynamic
     
     Static --> Parser
     Dynamic --> Parser
     
-    Parser --> Extractor
+    Parser --> ProdDetect
+    ProdDetect -->|Yes| URLs
+    ProdDetect -->|No| Extractor
+    
     Extractor --> Validator
+    Validator -->|New URLs| PQ
+    Validator -->|URL check| BF
     
-    Validator --> BF
-    Validator --> PQ
+    WS -->|Store metrics| MET
+    MET --> Domains
+    WS -->|Batch insert| URLs
     
-    WS --> PG
-    PG --> URLs
-    PG --> Meta
-    
+    %% Error Handling
+    WS -.->|Error logging| EL[(Error Logs)]
+    BP -.->|Crash recovery| EL
+
     %% Styles
     classDef primary fill:#2563eb,stroke:#1e40af,color:white
     classDef secondary fill:#4b5563,stroke:#374151,color:white
     classDef storage fill:#065f46,stroke:#064e3b,color:white
     classDef browser fill:#7c3aed,stroke:#6d28d9,color:white
+    classDef processing fill:#d97706,stroke:#b45309,color:white
     
-    class API,WS primary
-    class PQ,BF,RL,Parser,Extractor,Validator secondary
-    class PG,URLs,Meta storage
+    class API,WS,MET primary
+    class PQ,BF,RL,HM,Parser,Extractor,Validator,ProdDetect secondary
+    class PG,URLs,Domains,EL storage
     class BP,PW,Static,Dynamic browser
+    class Processing processing
 ```
 
 ## 4. Installation
@@ -223,7 +242,7 @@ response = requests.post(
     "http://localhost:5001/crawl",
     json={
         "domains": [
-            "https://www.flipkart.com/", "https://www.limeroad.com/"
+            "https://www.flipkart.com/"
         ]
     }
 )
@@ -256,7 +275,7 @@ health = requests.get("http://localhost:5001/")
 
 #### 2. Redis for Distributed State
 
-- **Bloom Filter Replacement**: Use RedisBloom for distributed URL tracking.
+- **Visited URL Tracking**: Currently uses in-memory set. Planned upgrade to RedisBloom
 
 #### 3. Monitoring & Metrics
 

@@ -1,9 +1,15 @@
+from pybloom_live import ScalableBloomFilter
+
+
 class VisitedURLTracker:
     def __init__(self):
-        self.seen_urls = set()
+        self.filter = ScalableBloomFilter(
+            initial_capacity=1000,
+            error_rate=0.001
+        )
 
     def add(self, url):
-        self.seen_urls.add(url)
+        self.filter.add(url)
 
     def __contains__(self, url):
-        return url in self.seen_urls
+        return url in self.filter

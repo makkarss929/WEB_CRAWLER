@@ -2,8 +2,8 @@ import asyncio
 import logging
 import os
 import re
-from urllib.parse import urlparse, urljoin, urldefrag
 from concurrent.futures import ProcessPoolExecutor
+from urllib.parse import urlparse, urljoin, urldefrag
 
 import aiohttp  # Add this import at the top
 from bs4 import BeautifulSoup
@@ -43,9 +43,6 @@ class WebScraper:
         self.executor = ProcessPoolExecutor()  # For CPU-bound tasks
         self.semaphore = asyncio.Semaphore(100)  # Concurrent request limit
 
-
-
-
     async def initialize(self):
         """Async initialization with validation"""
         db_config = {
@@ -73,7 +70,6 @@ class WebScraper:
 
             while not self.frontier.empty():
                 url = self.frontier.get_next()
-
 
                 if await self._should_skip(url):
                     continue
@@ -169,29 +165,44 @@ class WebScraper:
         if self._is_product_url(url):
             return True
 
-        # Fallback to content analysis
-        soup = BeautifulSoup(content, 'lxml')
-        return self._has_product_indicators(soup)
-
     def _is_product_url(self, url: str) -> bool:
-        """Optimized URL pattern matching"""
-        patterns = [
-            r'/p/[\w-]+', r'/dp/\w{10}', r'[&?]pid=[\d\w]+',
-            r'/product/', r'-p\d+', r'/buy/?$'
+        """Determine if URL points to a product page (optimized for Indian e-commerce sites)"""
+        product_patterns = [
+            # Myntra/Ajio/Nykaa: /p/<alphanum> or /buy
+            r"/p/[\w-]+", r"/buy/?$",
+            # Flipkart/Amazon: /dp/, /gp/product/, or pid=
+            r"/dp/[\w]{10}", r"/gp/product/[\w]{10}", r"[&?]pid=[\d\w]+",
+            # Tata CLiQ: /p-mp<digits> or /p-
+            r"/p-[\w]+", r"/p-mp\d+",
+            # Limeroad: -p followed by digits (e.g., showoff-p21597399)
+            r"-p\d+",
+            # Bewakoof: /p/ followed by descriptive slug
+            r"/p/[\w-]+",
+            # Numeric product ID in path (e.g., Myntra's 31340477)
+            r"/\d{6,}/"
         ]
-        return any(re.search(p, url, re.I) for p in patterns)
 
-
-
-    def _has_product_indicators(self, soup: BeautifulSoup) -> bool:
-        """Content-based product detection"""
-        indicators = [
-            ('meta[property="og:type"]', {'content': 'product'}),
-            ('div.product-details', {}),
-            ('span.price', {})
+        excluded_patterns = [
+            r"/category/", r"/search", r"\.(jpg|png|webp)(\?|$)",
+            r"/cart", r"/checkout", r"/review", r"/wishlist",
+            r"/store/", r"/shop/", r"/list/", r"/filter", r"/login", r"/product-reviews", r"/auth"
         ]
-        return any(soup.select(selector, attrs=attrs)
-                   for selector, attrs in indicators)
+
+        url_lower = url.lower()
+
+        # Check for product patterns and exclusions
+        is_product = (
+                any(re.search(p, url_lower) for p in product_patterns) and
+                not any(re.search(e, url_lower) for e in excluded_patterns)
+        )
+
+        # Additional validation for product IDs
+        has_product_id = (
+                re.search(r"\b\d{6,}\b", url) or  # Numeric ID (Myntra)
+                re.search(r"[_-][a-z0-9]{8,}", url_lower)  # Alphanumeric ID (Ajio/Limeroad)
+        )
+
+        return is_product and has_product_id
 
     async def _handle_links(self, content: str, base_url: str, is_product: bool):
         """Link extraction and frontier management"""
@@ -226,7 +237,6 @@ class WebScraper:
         self.current_batch.append((url, domain))
         if len(self.current_batch) >= self.BATCH_SIZE:
             asyncio.create_task(self._flush_batch())
-
 
     async def _flush_batch(self):
         """Database batch insert operation with safety checks"""
