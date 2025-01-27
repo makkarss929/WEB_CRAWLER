@@ -12,3 +12,7 @@ aiohttp
 asyncio
 playwright
 playwright-stealth
+pybloom-live==3.1.0
+asyncpg>=0.27.0
+psycopg2-binary>=2.9.0
+aiohttp

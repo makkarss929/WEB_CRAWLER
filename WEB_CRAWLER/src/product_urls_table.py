@@ -1,29 +1,22 @@
-from psycopg2 import sql
+import logging
 
-from src.db import PostgresConnection
+from src.storage.postgres import AsyncPostgres
 
 
 class ProductURLsManagementSystem:
     def __init__(self, table_name, db_connection=None, schema_name="public"):
         self.schema_name = schema_name
         self.table_name = table_name
-        self.db_connection = db_connection or PostgresConnection()
-        if self.table_name not in self.db_connection.list_tables():
-            self.create_table()
+        self.db_connection = db_connection or AsyncPostgres()
 
-    def create_table(self):
-        query = sql.SQL("""
-            CREATE TABLE IF NOT EXISTS {schema_name}.{table_name} (
-                id BIGSERIAL PRIMARY KEY,
-                url TEXT UNIQUE,
-                domain_name TEXT
-            );
-        """).format(
-            schema_name=sql.Identifier(self.schema_name),
-            table_name=sql.Identifier(self.table_name)
-        )
-        self.db_connection.execute_query(query=query)
-
-    def insert_one(self, url: str, domain_name: str):
-        row = {"url": url, "domain_name": domain_name}
-        self.db_connection.execute_insert(row, self.schema_name, self.table_name)
+    async def create_table(self):
+        """Create table using asyncpg connection pool"""
+        async with self.db_connection.pool.acquire() as conn:
+            await conn.execute(f"""
+                CREATE TABLE IF NOT EXISTS {self.schema_name}.{self.table_name} (
+                    id BIGSERIAL PRIMARY KEY,
+                    url TEXT UNIQUE,
+                    domain TEXT
+                );
+            """)
+            logging.info(f"Table {self.schema_name}.{self.table_name} created")
